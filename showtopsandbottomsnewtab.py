@@ -1,6 +1,6 @@
 # MenuTitle: List Glyphs with deviating tops annd bottoms
 __doc__="""
-Lists frrom selected glyphs with deviating tops
+Lists from selected glyphs with deviating tops
 and bottoms in current master .
 """
 
