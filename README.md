@@ -1,2 +1,3 @@
 # rolandhuse-scripts
-A Glyphs App script to create Roman numerals with OpenType features
+Various Glyphs Scripts from Roman numerals with OpenType features to Rovas Script production helper:
+
