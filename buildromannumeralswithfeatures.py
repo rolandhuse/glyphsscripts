@@ -1,157 +1,201 @@
-# MenuTitle: Build Roman Numerals with Features
+# MenuTitle: Build Roman Numerals (glyphs + ss01 feature)
+# -*- coding: utf-8 -*-
 __doc__ = """
-Builds Roman numeral glyphs and adds OpenType substitutions for stylistic sets and ligatures.
-Adds to existing ss01/liga features without overwriting them, and ensures ss01 precedes liga.
+Complete Roman numeral setup.
+1. Builds rnNull + 30 composites from the Latin caps I V X L C D M
+2. Writes the 'romanNumerals' feature prefix (glyph classes)
+3. Writes the ss01 feature (place-value contextual logic, 1-3999)
+Safe to re-run. Existing rn* glyphs are kept; prefix and ss01 are rewritten.
 """
 
-import traceback
-import re
-from GlyphsApp import *
-from GlyphsApp.plugins import *
+from GlyphsApp import Glyphs, GSGlyph, GSLayer, GSComponent
+from GlyphsApp import GSFeature, GSFeaturePrefix, Message
+from Foundation import NSPoint
 
-def create_roman_glyphs(font):
-    roman_glyphs = [
-        ("2160", "Ⅰ", ["I"]),
-        ("2161", "Ⅱ", ["I", "I"]),
-        ("2162", "Ⅲ", ["I", "I", "I"]),
-        ("2163", "Ⅳ", ["I", "V"]),
-        ("2164", "Ⅴ", ["V"]),
-        ("2165", "Ⅵ", ["V", "I"]),
-        ("2166", "Ⅶ", ["V", "I", "I"]),
-        ("2167", "Ⅷ", ["V", "I", "I", "I"]),
-        ("2168", "Ⅸ", ["I", "X"]),
-        ("2169", "Ⅹ", ["X"]),
-        ("216A", "Ⅺ", ["X", "I"]),
-        ("216B", "Ⅻ", ["X", "I", "I"]),
-        ("216C", "Ⅼ", ["L"]),
-        ("216D", "Ⅽ", ["C"]),
-        ("216E", "Ⅾ", ["D"]),
-        ("216F", "Ⅿ", ["M"]),
-        ("", "Twenty-roman", ["X", "X"]),
-    ]
+BASES = "IVXLCDM"
 
-    for unicode_hex, glyph_name, components in roman_glyphs:
-        try:
-            if font.glyphs[glyph_name]:
-                print(f"⚠️ Skipping {glyph_name}: Exists.")
-                continue
+SEQUENCES = [
+    "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX",
+    "X", "XX", "XXX", "XL", "L", "LX", "LXX", "LXXX", "XC",
+    "C", "CC", "CCC", "CD", "D", "DC", "DCC", "DCCC", "CM",
+    "M", "MM", "MMM",
+]
 
-            new_glyph = GSGlyph()
-            new_glyph.name = glyph_name
-            if unicode_hex:
-                new_glyph.unicode = unicode_hex
-                new_glyph.productionName = f"uni{unicode_hex}"
-            font.glyphs.append(new_glyph)
-            print(f"✅ Created {glyph_name}")
+PREFIX_NAME = "romanNumerals"
 
-            for master in font.masters:
-                master_id = master.id
-                new_layer = GSLayer()
-                new_layer.associatedMasterId = master_id
-                x_position = 0
-
-                for component_name in components:
-                    component_glyph = font.glyphs[component_name]
-                    if not component_glyph:
-                        print(f"   ⚠️ Missing component: {component_name}")
-                        continue
-
-                    component = GSComponent(component_name)
-                    component.automaticAlignment = True
-                    component.position = (x_position, 0)
-                    new_layer.components.append(component)
-
-                    component_layer = component_glyph.layers[master_id]
-                    x_position += component_layer.width
-
-                new_layer.width = x_position
-                new_glyph.layers[master_id] = new_layer
-
-        except Exception as e:
-            print(f"❌ Error in {glyph_name}: {e}")
-            traceback.print_exc()
-
-def add_opentype_features(font):
-    ss01_rules = """
-  # Single substitutions (Arabic to Roman)
-  sub one by One-roman;
-  sub two by Two-roman;
-  sub three by Three-roman;
-  sub four by Four-roman;
-  sub five by Five-roman;
-  sub six by Six-roman;
-  sub seven by Seven-roman;
-  sub eight by Eight-roman;
-  sub nine by Nine-roman;
+PREFIX_CODE = """@dAll  = [zero one two three four five six seven eight nine];
+@rnAll = [rnNull rnI rnII rnIII rnIV rnV rnVI rnVII rnVIII rnIX
+          rnX rnXX rnXXX rnXL rnL rnLX rnLXX rnLXXX rnXC
+          rnC rnCC rnCCC rnCD rnD rnDC rnDCC rnDCCC rnCM
+          rnM rnMM rnMMM];
 """
 
-    liga_rules = """
-  # Ligature substitutions
-  sub One-roman zero by Ten-roman;
-  sub One-roman One-roman by Eleven-roman;
-  sub One-roman Two-roman by Twelve-roman;
-  sub Two-roman zero by Twenty-roman;
-  sub Five-roman zero by Fifty-roman;
-  sub One-roman zero zero by Hundred-roman;
-  sub Five-roman zero zero by Fivehundred-roman;
-  sub One-roman zero zero zero by Thousand-roman;
+SS01_CODE = """lookup rnP4 {
+    ignore sub @dAll @dAll';
+    ignore sub @dAll' @dAll @dAll @dAll @dAll;
+    sub zero'  @dAll @dAll @dAll by rnNull;
+    sub one'   @dAll @dAll @dAll by rnM;
+    sub two'   @dAll @dAll @dAll by rnMM;
+    sub three' @dAll @dAll @dAll by rnMMM;
+} rnP4;
+
+lookup rnP3 {
+    ignore sub @dAll @dAll';
+    ignore sub @dAll' @dAll @dAll @dAll;
+    sub zero'  @dAll @dAll by rnNull;
+    sub one'   @dAll @dAll by rnC;
+    sub two'   @dAll @dAll by rnCC;
+    sub three' @dAll @dAll by rnCCC;
+    sub four'  @dAll @dAll by rnCD;
+    sub five'  @dAll @dAll by rnD;
+    sub six'   @dAll @dAll by rnDC;
+    sub seven' @dAll @dAll by rnDCC;
+    sub eight' @dAll @dAll by rnDCCC;
+    sub nine'  @dAll @dAll by rnCM;
+} rnP3;
+
+lookup rnP2 {
+    ignore sub @dAll @dAll';
+    ignore sub @dAll' @dAll @dAll;
+    sub zero'  @dAll by rnNull;
+    sub one'   @dAll by rnX;
+    sub two'   @dAll by rnXX;
+    sub three' @dAll by rnXXX;
+    sub four'  @dAll by rnXL;
+    sub five'  @dAll by rnL;
+    sub six'   @dAll by rnLX;
+    sub seven' @dAll by rnLXX;
+    sub eight' @dAll by rnLXXX;
+    sub nine'  @dAll by rnXC;
+} rnP2;
+
+lookup rnP1 {
+    ignore sub @dAll @dAll';
+    ignore sub @dAll' @dAll;
+    sub @rnAll zero' by rnNull;
+    sub one'   by rnI;
+    sub two'   by rnII;
+    sub three' by rnIII;
+    sub four'  by rnIV;
+    sub five'  by rnV;
+    sub six'   by rnVI;
+    sub seven' by rnVII;
+    sub eight' by rnVIII;
+    sub nine'  by rnIX;
+} rnP1;
 """
 
-    def update_feature(feature_name, rules):
-        glyph_names = set(g.name for g in font.glyphs)
-        referenced = set(re.findall(r"\bby\s+([A-Za-z0-9_.-]+);", rules))
-        missing = [g for g in referenced if g not in glyph_names]
-        if missing:
-            print(f"⚠️ Cannot add {feature_name}. Missing glyphs: {', '.join(missing)}")
-            return
 
-        existing_feature = None
-        for feature in font.features:
-            if feature.name == feature_name:
-                existing_feature = feature
-                break
+def get_layer(glyph, master_id):
+    layer = glyph.layers[master_id]
+    if layer is None:
+        layer = GSLayer()
+        layer.associatedMasterId = master_id
+        glyph.layers[master_id] = layer
+        layer = glyph.layers[master_id]
+    return layer
 
-        if existing_feature:
-            if rules.strip() not in existing_feature.code:
-                new_code = existing_feature.code.strip() + f"\n{rules}"
-                existing_feature.code = new_code
-                print(f"✅ Updated existing {feature_name} feature")
-            else:
-                print(f"⚠️ Rules already exist in {feature_name}")
-        else:
-            new_feature = GSFeature()
-            new_feature.name = feature_name
-            new_feature.code = rules  # ✅ No 'feature { }' wrapper here
-            font.features = list(font.features) + [new_feature]
-            print(f"✅ Created new {feature_name} feature")
 
-    update_feature("ss01", ss01_rules)
-    update_feature("liga", liga_rules)
+def build_glyphs(font):
+    missing = [b for b in BASES if not font.glyphs[b]]
+    if missing:
+        print("STOP - missing base glyphs: %s" % ", ".join(missing))
+        return None
 
-    # Ensure ss01 precedes liga
-    feature_names = [f.name for f in font.features]
-    if "ss01" in feature_names and "liga" in feature_names:
-        if feature_names.index("liga") < feature_names.index("ss01"):
-            ss01 = next(f for f in font.features if f.name == "ss01")
-            liga = next(f for f in font.features if f.name == "liga")
-            features = [f for f in font.features if f.name not in {"ss01", "liga"}]
-            font.features = features + [ss01, liga]
-            print("✅ Reordered: ss01 now precedes liga")
+    created = 0
+    skipped = 0
 
-# Run
-if __name__ == "__main__":
-    font = Glyphs.font
-    if font:
-        create_roman_glyphs(font)
-        add_opentype_features(font)
+    if font.glyphs["rnNull"]:
+        skipped += 1
+    else:
+        g = GSGlyph("rnNull")
+        font.glyphs.append(g)
+        g = font.glyphs["rnNull"]
+        g.export = True
+        for master in font.masters:
+            layer = get_layer(g, master.id)
+            layer.shapes = []
+            layer.width = 0
+        created += 1
+        print("   + rnNull")
+
+    for seq in SEQUENCES:
+        name = "rn" + seq
+        if font.glyphs[name]:
+            skipped += 1
+            continue
+        g = GSGlyph(name)
+        font.glyphs.append(g)
+        g = font.glyphs[name]
+        g.export = True
+        for master in font.masters:
+            layer = get_layer(g, master.id)
+            layer.shapes = []
+            x = 0
+            for letter in seq:
+                comp = GSComponent(letter)
+                comp.automaticAlignment = False
+                comp.position = NSPoint(x, 0)
+                layer.shapes.append(comp)
+                x += font.glyphs[letter].layers[master.id].width
+            layer.width = x
+        created += 1
+        print("   + %s" % name)
+
+    return (created, skipped)
+
+
+def write_prefix(font):
+    keep = [p for p in font.featurePrefixes if p.name != PREFIX_NAME]
+    prefix = GSFeaturePrefix()
+    prefix.name = PREFIX_NAME
+    prefix.code = PREFIX_CODE
+    font.featurePrefixes = [prefix] + keep
+    print("   > prefix '%s' written (first in list)" % PREFIX_NAME)
+
+
+def write_ss01(font):
+    had_old = any(f.name == "ss01" for f in font.features)
+    keep = [f for f in font.features if f.name != "ss01"]
+    feature = GSFeature()
+    feature.name = "ss01"
+    feature.code = SS01_CODE
+    feature.automatic = False
+    font.features = keep + [feature]
+    if had_old:
+        print("   > ss01 replaced (automatic generation OFF)")
+    else:
+        print("   > ss01 created (automatic generation OFF)")
+
+
+font = Glyphs.font
+
+if not font:
+    print("No font open.")
+else:
+    font.disableUpdateInterface()
+    try:
+        result = build_glyphs(font)
+        if result is not None:
+            write_prefix(font)
+            write_ss01(font)
+    finally:
+        font.enableUpdateInterface()
+
+    if result is not None:
+        created, skipped = result
+        print("")
+        print("Done. %i glyphs created, %i already present." % (created, skipped))
+        print("Now hit Compile in Font Info > Features, then test with ss01 on.")
 
         Message(
-            title="Roman Numerals with OT Features Added!",
-            message="Type 2025 with Roman numerals: 10001000205\n\n(Please enable both ss01 and standard ligatures OpenType Features)",
-            OKButton="Got it!"
+            title="Roman numerals ready",
+            message=(
+                "%i glyphs created, %i already there.\n\n"
+                "Next: Font Info > Features > Compile, "
+                "then turn on ss01 in the test tab."
+            ) % (created, skipped),
+            OKButton="Got it",
         )
 
-        font.newTab("2025 = 10001000205")
-        print("🎉 Done! Features updated and ordered.")
-    else:
-        print("⚠️ No font open.")
+        font.newTab("2025 1994 3999 4 40 400 4000 12345 0")
